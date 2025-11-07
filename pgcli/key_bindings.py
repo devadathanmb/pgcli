@@ -200,41 +200,53 @@ def pgcli_bindings(pgcli):
         """Move down in history."""
         event.current_buffer.history_forward(count=event.arg)
 
-    @kb.add("l", filter=vi_navigation_mode)
+    # Add these bindings with eager=True to take precedence when suggestions are available
+    # This is key for fish/zsh-style autosuggestion acceptance in vim normal mode
+    from prompt_toolkit.filters import Condition
+
+    @Condition
+    def has_suggestion_at_end():
+        """Check if there's a suggestion and cursor is at end of line."""
+        from prompt_toolkit.application.current import get_app
+        app = get_app()
+        buffer = app.current_buffer
+        return (
+            buffer.suggestion is not None
+            and buffer.document.is_cursor_at_the_end_of_line
+        )
+
+    @kb.add("l", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
     def _(event):
         """
-        Move forward in vi navigation mode, accepting autosuggestion if at end of line.
+        Accept autosuggestion with 'l' in vi normal mode when at end of line.
 
-        Mimics fish/zsh vim mode behavior where 'l' accepts autosuggestions
-        when the cursor is at the end of the line.
+        This takes precedence over normal 'l' movement when a suggestion is available.
         """
+        _logger.debug("Accepting suggestion with 'l' in normal mode")
         buff = event.current_buffer
-        doc = buff.document
-
-        # If cursor is at end of line and there's an autosuggestion, accept it
-        if doc.is_cursor_at_the_end_of_line and buff.suggestion is not None:
-            suggestion = buff.suggestion
+        suggestion = buff.suggestion
+        if suggestion:
             buff.insert_text(suggestion.text)
-        else:
-            # Normal forward character movement
-            buff.cursor_position += buff.document.get_cursor_right_position()
 
-    @kb.add("right", filter=vi_navigation_mode)
+    @kb.add("l", filter=vi_navigation_mode, eager=False)
     def _(event):
-        """
-        Move forward with arrow key in vi navigation mode, accepting autosuggestion if at end of line.
-
-        Same behavior as 'l' key for consistency.
-        """
+        """Normal 'l' forward movement when no suggestion or not at end."""
         buff = event.current_buffer
-        doc = buff.document
+        buff.cursor_position += buff.document.get_cursor_right_position()
 
-        # If cursor is at end of line and there's an autosuggestion, accept it
-        if doc.is_cursor_at_the_end_of_line and buff.suggestion is not None:
-            suggestion = buff.suggestion
+    @kb.add("right", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
+    def _(event):
+        """Accept autosuggestion with right arrow in vi normal mode when at end of line."""
+        _logger.debug("Accepting suggestion with right arrow in normal mode")
+        buff = event.current_buffer
+        suggestion = buff.suggestion
+        if suggestion:
             buff.insert_text(suggestion.text)
-        else:
-            # Normal forward character movement
-            buff.cursor_position += buff.document.get_cursor_right_position()
+
+    @kb.add("right", filter=vi_navigation_mode, eager=False)
+    def _(event):
+        """Normal right arrow forward movement when no suggestion or not at end."""
+        buff = event.current_buffer
+        buff.cursor_position += buff.document.get_cursor_right_position()
 
     return kb
