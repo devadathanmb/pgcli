@@ -47,7 +47,8 @@ from prompt_toolkit.layout.processors import (
     TabsProcessor,
 )
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory, ConditionalAutoSuggest
+from prompt_toolkit.filters import vi_insert_mode, vi_navigation_mode
 from pygments.lexers.sql import PostgresLexer
 
 from pgspecial.main import PGSpecial, NO_QUERY, PAGER_OFF, PAGER_LONG_OUTPUT
@@ -1030,7 +1031,12 @@ class PGCli:
                     # Render \t as 4 spaces instead of "^I"
                     TabsProcessor(char1=" ", char2=" "),
                 ],
-                auto_suggest=AutoSuggestFromHistory(),
+                auto_suggest=ConditionalAutoSuggest(
+                    AutoSuggestFromHistory(),
+                    # Show autosuggestions in both insert and navigation modes (for vim)
+                    # This enables fish/zsh-style behavior where suggestions are always visible
+                    filter=vi_insert_mode | vi_navigation_mode | ~vi_insert_mode  # Always show
+                ),
                 tempfile_suffix=".sql",
                 # N.b. pgcli's multi-line mode controls submit-on-Enter (which
                 # overrides the default behaviour of prompt_toolkit) and is
@@ -1048,6 +1054,10 @@ class PGCli:
                 enable_suspend=True,
                 editing_mode=EditingMode.VI if self.vi_mode else EditingMode.EMACS,
                 search_ignore_case=True,
+                # Reduce ESC key timeout to eliminate delay when entering vim normal mode
+                # Default is 0.5 seconds, we set to 10ms for instant response
+                timeoutlen=0.5,  # Keep default for key sequence timeout
+                ttimeoutlen=0.01,  # 10ms for escape key (was 0.5s)
             )
 
             return prompt_app
