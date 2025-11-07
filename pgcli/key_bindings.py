@@ -142,4 +142,36 @@ def pgcli_bindings(pgcli):
         """Move down in history."""
         event.current_buffer.history_forward(count=event.arg)
 
+    @kb.add("c-j", filter=has_completions)
+    def _(event):
+        """Navigate down in the completion menu."""
+        _logger.debug("Detected c-j key for completion navigation.")
+        buff = event.app.current_buffer
+        if buff.complete_state:
+            buff.complete_next()
+        else:
+            buff.start_completion(select_first=True)
+
+    @kb.add("c-k", filter=has_completions)
+    def _(event):
+        """Navigate up in the completion menu."""
+        _logger.debug("Detected c-k key for completion navigation.")
+        buff = event.app.current_buffer
+        if buff.complete_state:
+            buff.complete_previous()
+        else:
+            buff.start_completion(select_first=True)
+
+    @kb.add("c-.")
+    def _(event):
+        """Toggle autocompletion menu visibility."""
+        _logger.debug("Detected c-. key to toggle completion menu.")
+        buff = event.app.current_buffer
+        if buff.complete_state:
+            # Close the completion menu
+            buff.complete_state = None
+        else:
+            # Open the completion menu
+            buff.start_completion(select_first=False)
+
     return kb
