@@ -9,6 +9,12 @@ from prompt_toolkit.filters import (
     vi_mode,
 )
 
+try:
+    from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
+    CURSOR_SHAPE_SUPPORT = True
+except ImportError:
+    CURSOR_SHAPE_SUPPORT = False
+
 from .pgbuffer import buffer_should_be_handled, safe_multi_line_mode
 
 _logger = logging.getLogger(__name__)
@@ -38,6 +44,13 @@ def pgcli_bindings(pgcli):
         _logger.debug("Detected F4 key.")
         pgcli.vi_mode = not pgcli.vi_mode
         event.app.editing_mode = EditingMode.VI if pgcli.vi_mode else EditingMode.EMACS
+
+        # Update cursor shape when toggling vim mode
+        if CURSOR_SHAPE_SUPPORT:
+            if pgcli.vi_mode:
+                event.app.cursor = ModalCursorShapeConfig()
+            else:
+                event.app.cursor = None
 
     @kb.add("f5")
     def _(event):
