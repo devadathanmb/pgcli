@@ -1054,11 +1054,13 @@ class PGCli:
                 enable_suspend=True,
                 editing_mode=EditingMode.VI if self.vi_mode else EditingMode.EMACS,
                 search_ignore_case=True,
-                # Reduce ESC key timeout to eliminate delay when entering vim normal mode
-                # Default is 0.5 seconds, we set to 10ms for instant response
-                timeoutlen=0.5,  # Keep default for key sequence timeout
-                ttimeoutlen=0.01,  # 10ms for escape key (was 0.5s)
             )
+
+            # Reduce ESC key timeout to eliminate delay when entering vim normal mode
+            # These must be set on the app after creation, not in PromptSession constructor
+            if self.vi_mode:
+                prompt_app.app.timeoutlen = 0.5  # Keep default for key sequence timeout
+                prompt_app.app.ttimeoutlen = 0.01  # 10ms for escape key (was 0.5s)
 
             return prompt_app
 
