@@ -10,7 +10,45 @@ from prompt_toolkit.filters import (
 )
 
 try:
-    from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
+    from prompt_toolkit.cursor_shapes import (
+        CursorShape,
+        CursorShapeConfig,
+    )
+    from prompt_toolkit.enums import EditingMode as PTEditingMode
+    from typing import Any, TYPE_CHECKING
+
+    if TYPE_CHECKING:
+        from prompt_toolkit.application import Application
+
+    class BlinkingModalCursorShapeConfig(CursorShapeConfig):
+        """
+        Show blinking cursor shape according to the current input mode.
+        """
+        def get_cursor_shape(self, application: "Application[Any]") -> CursorShape:
+            from prompt_toolkit.key_binding.vi_state import InputMode
+
+            if application.editing_mode == PTEditingMode.VI:
+                if application.vi_state.input_mode in {
+                    InputMode.NAVIGATION,
+                }:
+                    return CursorShape.BLINKING_BLOCK
+                if application.vi_state.input_mode in {
+                    InputMode.INSERT,
+                    InputMode.INSERT_MULTIPLE,
+                }:
+                    return CursorShape.BLINKING_BEAM
+                if application.vi_state.input_mode in {
+                    InputMode.REPLACE,
+                    InputMode.REPLACE_SINGLE,
+                }:
+                    return CursorShape.BLINKING_UNDERLINE
+            elif application.editing_mode == PTEditingMode.EMACS:
+                # like vi's INSERT
+                return CursorShape.BLINKING_BEAM
+
+            # Default
+            return CursorShape.BLINKING_BLOCK
+
     CURSOR_SHAPE_SUPPORT = True
 except ImportError:
     CURSOR_SHAPE_SUPPORT = False
@@ -45,12 +83,9 @@ def pgcli_bindings(pgcli):
         pgcli.vi_mode = not pgcli.vi_mode
         event.app.editing_mode = EditingMode.VI if pgcli.vi_mode else EditingMode.EMACS
 
-        # Update cursor shape when toggling vim mode
+        # Update blinking cursor shape when toggling vim mode
         if CURSOR_SHAPE_SUPPORT:
-            if pgcli.vi_mode:
-                event.app.cursor = ModalCursorShapeConfig()
-            else:
-                event.app.cursor = None
+            event.app.cursor = BlinkingModalCursorShapeConfig()
 
     @kb.add("f5")
     def _(event):

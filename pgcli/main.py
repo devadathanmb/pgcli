@@ -50,7 +50,45 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 try:
-    from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
+    from prompt_toolkit.cursor_shapes import (
+        CursorShape,
+        CursorShapeConfig,
+    )
+    from prompt_toolkit.enums import EditingMode as PTEditingMode
+    from typing import Any, TYPE_CHECKING
+
+    if TYPE_CHECKING:
+        from prompt_toolkit.application import Application
+
+    class BlinkingModalCursorShapeConfig(CursorShapeConfig):
+        """
+        Show blinking cursor shape according to the current input mode.
+        """
+        def get_cursor_shape(self, application: "Application[Any]") -> CursorShape:
+            from prompt_toolkit.key_binding.vi_state import InputMode
+
+            if application.editing_mode == PTEditingMode.VI:
+                if application.vi_state.input_mode in {
+                    InputMode.NAVIGATION,
+                }:
+                    return CursorShape.BLINKING_BLOCK
+                if application.vi_state.input_mode in {
+                    InputMode.INSERT,
+                    InputMode.INSERT_MULTIPLE,
+                }:
+                    return CursorShape.BLINKING_BEAM
+                if application.vi_state.input_mode in {
+                    InputMode.REPLACE,
+                    InputMode.REPLACE_SINGLE,
+                }:
+                    return CursorShape.BLINKING_UNDERLINE
+            elif application.editing_mode == PTEditingMode.EMACS:
+                # like vi's INSERT
+                return CursorShape.BLINKING_BEAM
+
+            # Default
+            return CursorShape.BLINKING_BLOCK
+
     CURSOR_SHAPE_SUPPORT = True
 except ImportError:
     CURSOR_SHAPE_SUPPORT = False
@@ -1016,10 +1054,10 @@ class PGCli:
             complete_style = CompleteStyle.COLUMN
 
         with self._completer_lock:
-            # Configure cursor shape for vim mode
+            # Configure blinking cursor shape for vim mode
             cursor_shape_config = None
-            if self.vi_mode and CURSOR_SHAPE_SUPPORT:
-                cursor_shape_config = ModalCursorShapeConfig()
+            if CURSOR_SHAPE_SUPPORT:
+                cursor_shape_config = BlinkingModalCursorShapeConfig()
 
             prompt_app = PromptSession(
                 lexer=PygmentsLexer(PostgresLexer),
