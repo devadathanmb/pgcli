@@ -174,13 +174,14 @@ def pgcli_bindings(pgcli):
             # Open the completion menu
             buff.start_completion(select_first=False)
 
-    @kb.add("c-y", filter=has_completions)
+    @kb.add("c-y")
     def _(event):
-        """Accept the current completion suggestion."""
-        _logger.debug("Detected c-y key to accept completion.")
+        """Accept the auto-suggestion from history (grayed-out text)."""
+        _logger.debug("Detected c-y key to accept auto-suggestion from history.")
         buff = event.app.current_buffer
-        if buff.complete_state:
-            # Accept the current completion
-            buff.complete_state = None
+        suggestion = buff.suggestion
+        if suggestion:
+            # Accept the entire auto-suggestion
+            buff.insert_text(suggestion.text)
 
     return kb
