@@ -67,7 +67,7 @@ from .config import (
     get_config,
     get_config_filename,
 )
-from .key_bindings import pgcli_bindings
+from .key_bindings import pgcli_bindings, setup_vim_cursor_shapes
 from .packages.formatter.sqlformatter import register_new_formatter
 from .packages.prompt_utils import confirm, confirm_destructive_query
 from .packages.parseutils import is_destructive
@@ -983,6 +983,10 @@ class PGCli:
 
     def _build_cli(self, history):
         key_bindings = pgcli_bindings(self)
+
+        # Setup cursor shape changes for vim mode
+        if self.vi_mode:
+            setup_vim_cursor_shapes()
 
         def get_message():
             if self.dsn_alias and self.prompt_dsn_format is not None:

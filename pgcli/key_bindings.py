@@ -1,17 +1,54 @@
 import logging
+import sys
 from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding.vi_state import InputMode, ViState
 from prompt_toolkit.filters import (
     completion_is_selected,
     is_searching,
     has_completions,
     has_selection,
     vi_mode,
+    vi_insert_mode,
+    vi_navigation_mode,
 )
 
 from .pgbuffer import buffer_should_be_handled, safe_multi_line_mode
 
 _logger = logging.getLogger(__name__)
+
+
+def setup_vim_cursor_shapes():
+    """
+    Configure cursor shape changes for vim modes.
+
+    Uses terminal escape sequences to change cursor appearance:
+    - Block cursor (█) in navigation/normal mode
+    - Beam cursor (|) in insert mode
+    - Underline cursor (_) in replace mode
+    """
+    def set_input_mode(self, mode):
+        # Cursor shape codes: 1=block, 3=underline, 5=beam
+        shape = {
+            InputMode.NAVIGATION: 1,  # Block cursor for normal mode
+            InputMode.REPLACE: 3,      # Underline cursor for replace mode
+            InputMode.INSERT: 5,       # Beam cursor for insert mode
+        }.get(mode, 5)
+
+        # Send escape sequence to terminal
+        out = getattr(sys.stdout, 'buffer', sys.stdout)
+        try:
+            out.write('\x1b[{} q'.format(shape).encode('ascii'))
+            sys.stdout.flush()
+        except (AttributeError, OSError):
+            # Silently ignore if terminal doesn't support cursor shape changes
+            pass
+
+        self._input_mode = mode
+
+    # Patch ViState to include cursor shape changes
+    ViState._input_mode = InputMode.INSERT
+    ViState.input_mode = property(lambda self: self._input_mode, set_input_mode)
 
 
 def pgcli_bindings(pgcli):
@@ -38,6 +75,18 @@ def pgcli_bindings(pgcli):
         _logger.debug("Detected F4 key.")
         pgcli.vi_mode = not pgcli.vi_mode
         event.app.editing_mode = EditingMode.VI if pgcli.vi_mode else EditingMode.EMACS
+
+        # Setup cursor shapes when switching to vim mode
+        if pgcli.vi_mode:
+            setup_vim_cursor_shapes()
+        else:
+            # Reset to default beam cursor when switching to emacs mode
+            out = getattr(sys.stdout, 'buffer', sys.stdout)
+            try:
+                out.write(b'\x1b[5 q')  # Beam cursor
+                sys.stdout.flush()
+            except (AttributeError, OSError):
+                pass
 
     @kb.add("f5")
     def _(event):
@@ -128,5 +177,42 @@ def pgcli_bindings(pgcli):
     def _(event):
         """Move down in history."""
         event.current_buffer.history_forward(count=event.arg)
+
+    @kb.add("l", filter=vi_navigation_mode)
+    def _(event):
+        """
+        Move forward in vi navigation mode, accepting autosuggestion if at end of line.
+
+        Mimics fish/zsh vim mode behavior where 'l' accepts autosuggestions
+        when the cursor is at the end of the line.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+
+        # If cursor is at end of line and there's an autosuggestion, accept it
+        if doc.is_cursor_at_the_end_of_line and buff.suggestion is not None:
+            suggestion = buff.suggestion
+            buff.insert_text(suggestion.text)
+        else:
+            # Normal forward character movement
+            buff.cursor_position += buff.document.get_cursor_right_position()
+
+    @kb.add("right", filter=vi_navigation_mode)
+    def _(event):
+        """
+        Move forward with arrow key in vi navigation mode, accepting autosuggestion if at end of line.
+
+        Same behavior as 'l' key for consistency.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+
+        # If cursor is at end of line and there's an autosuggestion, accept it
+        if doc.is_cursor_at_the_end_of_line and buff.suggestion is not None:
+            suggestion = buff.suggestion
+            buff.insert_text(suggestion.text)
+        else:
+            # Normal forward character movement
+            buff.cursor_position += buff.document.get_cursor_right_position()
 
     return kb
