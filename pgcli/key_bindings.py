@@ -162,10 +162,10 @@ def pgcli_bindings(pgcli):
         else:
             buff.start_completion(select_first=True)
 
-    @kb.add("c-.")
+    @kb.add("c-t")
     def _(event):
         """Toggle autocompletion menu visibility."""
-        _logger.debug("Detected c-. key to toggle completion menu.")
+        _logger.debug("Detected c-t key to toggle completion menu.")
         buff = event.app.current_buffer
         if buff.complete_state:
             # Close the completion menu
