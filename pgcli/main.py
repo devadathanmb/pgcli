@@ -48,6 +48,12 @@ from prompt_toolkit.layout.processors import (
 )
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+
+try:
+    from prompt_toolkit.cursor_shapes import ModalCursorShapeConfig
+    CURSOR_SHAPE_SUPPORT = True
+except ImportError:
+    CURSOR_SHAPE_SUPPORT = False
 from pygments.lexers.sql import PostgresLexer
 
 from pgspecial.main import PGSpecial, NO_QUERY, PAGER_OFF, PAGER_LONG_OUTPUT
@@ -1010,6 +1016,11 @@ class PGCli:
             complete_style = CompleteStyle.COLUMN
 
         with self._completer_lock:
+            # Configure cursor shape for vim mode
+            cursor_shape_config = None
+            if self.vi_mode and CURSOR_SHAPE_SUPPORT:
+                cursor_shape_config = ModalCursorShapeConfig()
+
             prompt_app = PromptSession(
                 lexer=PygmentsLexer(PostgresLexer),
                 reserve_space_for_menu=self.min_num_menu_lines,
@@ -1044,6 +1055,7 @@ class PGCli:
                 enable_suspend=True,
                 editing_mode=EditingMode.VI if self.vi_mode else EditingMode.EMACS,
                 search_ignore_case=True,
+                cursor=cursor_shape_config,
             )
 
             return prompt_app
