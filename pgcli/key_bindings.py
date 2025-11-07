@@ -174,4 +174,13 @@ def pgcli_bindings(pgcli):
             # Open the completion menu
             buff.start_completion(select_first=False)
 
+    @kb.add("c-y", filter=has_completions)
+    def _(event):
+        """Accept the current completion suggestion."""
+        _logger.debug("Detected c-y key to accept completion.")
+        buff = event.app.current_buffer
+        if buff.complete_state:
+            # Accept the current completion
+            buff.complete_state = None
+
     return kb
