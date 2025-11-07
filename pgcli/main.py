@@ -912,6 +912,16 @@ class PGCli:
 
         self.prompt_app = self._build_cli(history)
 
+        # Configure vi mode timeouts to eliminate ESC key delay
+        if self.vi_mode and self.prompt_app:
+            # Set ttimeoutlen to 10ms for fast ESC response (default is 500ms)
+            # timeoutlen remains at default 1000ms for key sequences
+            try:
+                self.prompt_app.app.ttimeoutlen = 0.01
+                logger.debug("Set ttimeoutlen to 0.01 for fast ESC response")
+            except AttributeError:
+                logger.debug("Could not set ttimeoutlen - attribute not found")
+
         if not self.less_chatty:
             print("Server: PostgreSQL", self.pgexecute.server_version)
             print("Version:", __version__)
