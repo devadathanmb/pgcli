@@ -73,20 +73,42 @@ def pgcli_bindings(pgcli):
     @kb.add("c-space")
     def _(event):
         """
-        Initialize autocompletion at cursor.
+        Toggle autocompletion at cursor.
 
         If the autocompletion menu is not showing, display it with the
         appropriate completions for the context.
 
-        If the menu is showing, select the next completion.
+        If the menu is showing, close it (toggle off).
         """
         _logger.debug("Detected <C-Space> key.")
 
         b = event.app.current_buffer
         if b.complete_state:
-            b.complete_next()
+            # Close completion menu (toggle off)
+            b.complete_state = None
         else:
+            # Open completion menu (toggle on)
             b.start_completion(select_first=False)
+
+    @kb.add("c-j", filter=has_completions)
+    def _(event):
+        """
+        Navigate to next completion (down) in autocomplete menu.
+
+        Works like Ctrl+n but uses Vim-style j (down) binding.
+        """
+        _logger.debug("Detected <C-j> key.")
+        event.current_buffer.complete_next()
+
+    @kb.add("c-k", filter=has_completions)
+    def _(event):
+        """
+        Navigate to previous completion (up) in autocomplete menu.
+
+        Works like Ctrl+p but uses Vim-style k (up) binding.
+        """
+        _logger.debug("Detected <C-k> key.")
+        event.current_buffer.complete_previous()
 
     @kb.add("enter", filter=completion_is_selected)
     def _(event):
