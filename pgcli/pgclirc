@@ -136,6 +136,19 @@ syntax_style = default
 # When Vi mode is enabled you can use modal editing features offered by Vi in the REPL.
 # When Vi mode is disabled emacs keybindings such as Ctrl-A for home and Ctrl-E
 # for end are available in the REPL.
+#
+# Available key bindings:
+#   F2           - Toggle smart completion on/off
+#   F3           - Toggle multiline mode on/off
+#   F4           - Toggle between Vi and Emacs mode
+#   F5           - Toggle EXPLAIN mode on/off
+#   Tab          - Trigger/cycle through completions
+#   Esc          - Close completion menu
+#   Ctrl+Space   - Toggle completion menu on/off
+#   Ctrl+j       - Navigate to next completion (down) - Vim style
+#   Ctrl+k       - Navigate to previous completion (up) - Vim style
+#   Ctrl+p       - Move up in history
+#   Ctrl+n       - Move down in history
 vi = False
 
 # Error handling
