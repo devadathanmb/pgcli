@@ -577,6 +577,52 @@ def test_duration_in_words(duration_in_seconds, words):
     assert duration_in_words(duration_in_seconds) == words
 
 
+@pytest.mark.parametrize(
+    "transaction_status,expected",
+    [
+        ("*", "*testuser"),
+        ("!", "!testuser"),
+        ("", "testuser"),
+    ],
+)
+def test_get_prompt_with_transaction_status(transaction_status, expected):
+    """Test that \\x prompt variable shows transaction status."""
+    cli = PGCli()
+    cli.pgexecute = mock.MagicMock()
+    cli.pgexecute.user = "testuser"
+    cli.pgexecute.dbname = "testdb"
+    cli.pgexecute.host = "localhost"
+    cli.pgexecute.short_host = "localhost"
+    cli.pgexecute.port = 5432
+    cli.pgexecute.pid = 12345
+    cli.pgexecute.superuser = False
+
+    with mock.patch.object(
+        cli.pgexecute, "transaction_status", return_value=transaction_status
+    ):
+        result = cli.get_prompt("\\x\\u")
+    assert result == expected
+
+
+def test_get_prompt_transaction_status_in_full_prompt():
+    """Test that \\x works in a full prompt format."""
+    cli = PGCli()
+    cli.pgexecute = mock.MagicMock()
+    cli.pgexecute.user = "user"
+    cli.pgexecute.dbname = "mydb"
+    cli.pgexecute.host = "db.example.com"
+    cli.pgexecute.short_host = "db.example.com"
+    cli.pgexecute.port = 5432
+    cli.pgexecute.pid = 12345
+    cli.pgexecute.superuser = False
+
+    with mock.patch.object(
+        cli.pgexecute, "transaction_status", return_value="*"
+    ):
+        result = cli.get_prompt("\\x\\u@\\h:\\d> ")
+    assert result == "*user@db.example.com:mydb> "
+
+
 @dbtest
 def test_notifications(executor):
     run(executor, "listen chan1")
