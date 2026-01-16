@@ -17,16 +17,44 @@ from .pgbuffer import buffer_should_be_handled, safe_multi_line_mode
 
 _logger = logging.getLogger(__name__)
 
+# Track whether ViState has been patched to avoid redundant monkeypatching
+_vim_cursor_shapes_configured = False
+
+
+def _set_cursor_shape(shape_code):
+    """
+    Send terminal escape sequence to change cursor shape.
+
+    Args:
+        shape_code: Cursor shape code (1=block, 3=underline, 5=beam)
+    """
+    out = getattr(sys.stdout, 'buffer', sys.stdout)
+    try:
+        # Write escape sequence as bytes
+        out.write(f'\x1b[{shape_code} q'.encode('ascii'))
+        sys.stdout.flush()
+    except (AttributeError, OSError):
+        # Silently ignore if terminal doesn't support cursor shape changes
+        pass
+
 
 def setup_vim_cursor_shapes():
     """
-    Configure cursor shape changes for vim modes.
+    Configure cursor shape changes for vim modes (idempotent).
 
     Uses terminal escape sequences to change cursor appearance:
     - Block cursor (█) in navigation/normal mode
     - Beam cursor (|) in insert mode
     - Underline cursor (_) in replace mode
+
+    This function can be called multiple times safely - it only patches ViState once.
     """
+    global _vim_cursor_shapes_configured
+
+    # Only patch ViState once to avoid issues with multiple calls
+    if _vim_cursor_shapes_configured:
+        return
+
     def set_input_mode(self, mode):
         # Cursor shape codes: 1=block, 3=underline, 5=beam
         shape = {
@@ -35,20 +63,14 @@ def setup_vim_cursor_shapes():
             InputMode.INSERT: 5,       # Beam cursor for insert mode
         }.get(mode, 5)
 
-        # Send escape sequence to terminal
-        out = getattr(sys.stdout, 'buffer', sys.stdout)
-        try:
-            out.write('\x1b[{} q'.format(shape).encode('ascii'))
-            sys.stdout.flush()
-        except (AttributeError, OSError):
-            # Silently ignore if terminal doesn't support cursor shape changes
-            pass
-
+        _set_cursor_shape(shape)
         self._input_mode = mode
 
     # Patch ViState to include cursor shape changes
     ViState._input_mode = InputMode.INSERT
     ViState.input_mode = property(lambda self: self._input_mode, set_input_mode)
+
+    _vim_cursor_shapes_configured = True
 
 
 def pgcli_bindings(pgcli):
@@ -76,17 +98,10 @@ def pgcli_bindings(pgcli):
         pgcli.vi_mode = not pgcli.vi_mode
         event.app.editing_mode = EditingMode.VI if pgcli.vi_mode else EditingMode.EMACS
 
-        # Setup cursor shapes when switching to vim mode
         if pgcli.vi_mode:
             setup_vim_cursor_shapes()
         else:
-            # Reset to default beam cursor when switching to emacs mode
-            out = getattr(sys.stdout, 'buffer', sys.stdout)
-            try:
-                out.write(b'\x1b[5 q')  # Beam cursor
-                sys.stdout.flush()
-            except (AttributeError, OSError):
-                pass
+            _set_cursor_shape(5)
 
     @kb.add("f5")
     def _(event):
@@ -224,9 +239,7 @@ def pgcli_bindings(pgcli):
         """
         _logger.debug("Accepting suggestion with 'l' in normal mode")
         buff = event.current_buffer
-        suggestion = buff.suggestion
-        if suggestion:
-            buff.insert_text(suggestion.text)
+        buff.insert_text(buff.suggestion.text)
 
     @kb.add("l", filter=vi_navigation_mode, eager=False)
     def _(event):
@@ -239,9 +252,7 @@ def pgcli_bindings(pgcli):
         """Accept autosuggestion with right arrow in vi normal mode when at end of line."""
         _logger.debug("Accepting suggestion with right arrow in normal mode")
         buff = event.current_buffer
-        suggestion = buff.suggestion
-        if suggestion:
-            buff.insert_text(suggestion.text)
+        buff.insert_text(buff.suggestion.text)
 
     @kb.add("right", filter=vi_navigation_mode, eager=False)
     def _(event):
