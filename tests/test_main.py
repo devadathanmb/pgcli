@@ -578,14 +578,14 @@ def test_duration_in_words(duration_in_seconds, words):
 
 
 @pytest.mark.parametrize(
-    "transaction_status,expected",
+    "is_failed,is_valid,expected",
     [
-        ("*", "*testuser"),
-        ("!", "!testuser"),
-        ("", "testuser"),
+        (False, True, "*testuser"),  # valid transaction → "*"
+        (True, False, "!testuser"),  # failed transaction → "!"
+        (False, False, "testuser"),  # idle → ""
     ],
 )
-def test_get_prompt_with_transaction_status(transaction_status, expected):
+def test_get_prompt_with_transaction_status(is_failed, is_valid, expected):
     """Test that \\x prompt variable shows transaction status."""
     cli = PGCli()
     cli.pgexecute = mock.MagicMock()
@@ -597,10 +597,10 @@ def test_get_prompt_with_transaction_status(transaction_status, expected):
     cli.pgexecute.pid = 12345
     cli.pgexecute.superuser = False
 
-    with mock.patch.object(
-        cli.pgexecute, "transaction_status", return_value=transaction_status
-    ):
-        result = cli.get_prompt("\\x\\u")
+    cli.pgexecute.failed_transaction.return_value = is_failed
+    cli.pgexecute.valid_transaction.return_value = is_valid
+
+    result = cli.get_prompt("\\x\\u")
     assert result == expected
 
 
@@ -616,10 +616,10 @@ def test_get_prompt_transaction_status_in_full_prompt():
     cli.pgexecute.pid = 12345
     cli.pgexecute.superuser = False
 
-    with mock.patch.object(
-        cli.pgexecute, "transaction_status", return_value="*"
-    ):
-        result = cli.get_prompt("\\x\\u@\\h:\\d> ")
+    cli.pgexecute.failed_transaction.return_value = False
+    cli.pgexecute.valid_transaction.return_value = True
+
+    result = cli.get_prompt("\\x\\u@\\h:\\d> ")
     assert result == "*user@db.example.com:mydb> "
 
 

@@ -298,20 +298,6 @@ class PGExecute:
         status = self.conn.info.transaction_status
         return status == psycopg.pq.TransactionStatus.ACTIVE or status == psycopg.pq.TransactionStatus.INTRANS
 
-    def transaction_status(self):
-        """Return transaction status character for prompt.
-
-        Following psql convention:
-        - '*' when in a valid transaction (ACTIVE or INTRANS)
-        - '!' when in a failed transaction (INERROR)
-        - '' when idle
-        """
-        if self.failed_transaction():
-            return "!"
-        elif self.valid_transaction():
-            return "*"
-        return ""
-
     def run(
         self,
         statement,

@@ -1248,6 +1248,20 @@ class PGCli:
         with self._completer_lock:
             return self.completer.get_completions(Document(text=text, cursor_position=cursor_positition), None)
 
+    def _get_transaction_status_char(self) -> str:
+        """Return transaction status character for prompt.
+
+        Following psql convention:
+        - '*' when in a valid transaction (ACTIVE or INTRANS)
+        - '!' when in a failed transaction (INERROR)
+        - '' when idle
+        """
+        if self.pgexecute.failed_transaction():
+            return "!"
+        if self.pgexecute.valid_transaction():
+            return "*"
+        return ""
+
     def get_prompt(self, string):
         # should be before replacing \\d
         string = string.replace("\\dsn_alias", self.dsn_alias or "")
@@ -1263,7 +1277,7 @@ class PGCli:
         string = string.replace("\\i", str(self.pgexecute.pid) or "(none)")
         string = string.replace("\\#", "#" if self.pgexecute.superuser else ">")
         string = string.replace("\\n", "\n")
-        string = string.replace("\\x", self.pgexecute.transaction_status())
+        string = string.replace("\\x", self._get_transaction_status_char())
         return string
 
     def get_last_query(self):
