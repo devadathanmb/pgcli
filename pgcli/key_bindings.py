@@ -1,17 +1,76 @@
 import logging
+import sys
 from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding.vi_state import InputMode, ViState
 from prompt_toolkit.filters import (
     completion_is_selected,
     is_searching,
     has_completions,
     has_selection,
     vi_mode,
+    vi_insert_mode,
+    vi_navigation_mode,
 )
 
 from .pgbuffer import buffer_should_be_handled, safe_multi_line_mode
 
 _logger = logging.getLogger(__name__)
+
+# Track whether ViState has been patched to avoid redundant monkeypatching
+_vim_cursor_shapes_configured = False
+
+
+def _set_cursor_shape(shape_code):
+    """
+    Send terminal escape sequence to change cursor shape.
+
+    Args:
+        shape_code: Cursor shape code (1=block, 3=underline, 5=beam)
+    """
+    out = getattr(sys.stdout, 'buffer', sys.stdout)
+    try:
+        # Write escape sequence as bytes
+        out.write(f'\x1b[{shape_code} q'.encode('ascii'))
+        sys.stdout.flush()
+    except (AttributeError, OSError):
+        # Silently ignore if terminal doesn't support cursor shape changes
+        pass
+
+
+def setup_vim_cursor_shapes():
+    """
+    Configure cursor shape changes for vim modes (idempotent).
+
+    Uses terminal escape sequences to change cursor appearance:
+    - Block cursor (█) in navigation/normal mode
+    - Beam cursor (|) in insert mode
+    - Underline cursor (_) in replace mode
+
+    This function can be called multiple times safely - it only patches ViState once.
+    """
+    global _vim_cursor_shapes_configured
+
+    # Only patch ViState once to avoid issues with multiple calls
+    if _vim_cursor_shapes_configured:
+        return
+
+    def set_input_mode(self, mode):
+        # Cursor shape codes: 1=block, 3=underline, 5=beam
+        shape = {
+            InputMode.NAVIGATION: 1,  # Block cursor for normal mode
+            InputMode.REPLACE: 3,      # Underline cursor for replace mode
+            InputMode.INSERT: 5,       # Beam cursor for insert mode
+        }.get(mode, 5)
+
+        _set_cursor_shape(shape)
+        self._input_mode = mode
+
+    # Patch ViState to include cursor shape changes
+    ViState._input_mode = InputMode.INSERT
+    ViState.input_mode = property(lambda self: self._input_mode, set_input_mode)
+
+    _vim_cursor_shapes_configured = True
 
 
 def pgcli_bindings(pgcli):
@@ -38,6 +97,11 @@ def pgcli_bindings(pgcli):
         _logger.debug("Detected F4 key.")
         pgcli.vi_mode = not pgcli.vi_mode
         event.app.editing_mode = EditingMode.VI if pgcli.vi_mode else EditingMode.EMACS
+
+        if pgcli.vi_mode:
+            setup_vim_cursor_shapes()
+        else:
+            _set_cursor_shape(5)
 
     @kb.add("f5")
     def _(event):
@@ -73,20 +137,42 @@ def pgcli_bindings(pgcli):
     @kb.add("c-space")
     def _(event):
         """
-        Initialize autocompletion at cursor.
+        Toggle autocompletion at cursor.
 
         If the autocompletion menu is not showing, display it with the
         appropriate completions for the context.
 
-        If the menu is showing, select the next completion.
+        If the menu is showing, close it (toggle off).
         """
         _logger.debug("Detected <C-Space> key.")
 
         b = event.app.current_buffer
         if b.complete_state:
-            b.complete_next()
+            # Close completion menu (toggle off)
+            b.complete_state = None
         else:
+            # Open completion menu (toggle on)
             b.start_completion(select_first=False)
+
+    @kb.add("c-j", filter=has_completions)
+    def _(event):
+        """
+        Navigate to next completion (down) in autocomplete menu.
+
+        Works like Ctrl+n but uses Vim-style j (down) binding.
+        """
+        _logger.debug("Detected <C-j> key.")
+        event.current_buffer.complete_next()
+
+    @kb.add("c-k", filter=has_completions)
+    def _(event):
+        """
+        Navigate to previous completion (up) in autocomplete menu.
+
+        Works like Ctrl+p but uses Vim-style k (up) binding.
+        """
+        _logger.debug("Detected <C-k> key.")
+        event.current_buffer.complete_previous()
 
     @kb.add("enter", filter=completion_is_selected)
     def _(event):
@@ -128,5 +214,50 @@ def pgcli_bindings(pgcli):
     def _(event):
         """Move down in history."""
         event.current_buffer.history_forward(count=event.arg)
+
+    # Add these bindings with eager=True to take precedence when suggestions are available
+    # This is key for fish/zsh-style autosuggestion acceptance in vim normal mode
+    from prompt_toolkit.filters import Condition
+
+    @Condition
+    def has_suggestion_at_end():
+        """Check if there's a suggestion and cursor is at end of line."""
+        from prompt_toolkit.application.current import get_app
+        app = get_app()
+        buffer = app.current_buffer
+        return (
+            buffer.suggestion is not None
+            and buffer.document.is_cursor_at_the_end_of_line
+        )
+
+    @kb.add("l", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
+    def _(event):
+        """
+        Accept autosuggestion with 'l' in vi normal mode when at end of line.
+
+        This takes precedence over normal 'l' movement when a suggestion is available.
+        """
+        _logger.debug("Accepting suggestion with 'l' in normal mode")
+        buff = event.current_buffer
+        buff.insert_text(buff.suggestion.text)
+
+    @kb.add("l", filter=vi_navigation_mode, eager=False)
+    def _(event):
+        """Normal 'l' forward movement when no suggestion or not at end."""
+        buff = event.current_buffer
+        buff.cursor_position += buff.document.get_cursor_right_position()
+
+    @kb.add("right", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
+    def _(event):
+        """Accept autosuggestion with right arrow in vi normal mode when at end of line."""
+        _logger.debug("Accepting suggestion with right arrow in normal mode")
+        buff = event.current_buffer
+        buff.insert_text(buff.suggestion.text)
+
+    @kb.add("right", filter=vi_navigation_mode, eager=False)
+    def _(event):
+        """Normal right arrow forward movement when no suggestion or not at end."""
+        buff = event.current_buffer
+        buff.cursor_position += buff.document.get_cursor_right_position()
 
     return kb
