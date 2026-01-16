@@ -1,5 +1,5 @@
-Upcoming (TBD)
-==============
+4.4.0 (2025-12-24)
+==================
 
 Features:
 ---------
@@ -8,6 +8,7 @@ Features:
     * Provide `init-command` in the config file
     * Support dsn specific init-command in the config file
 * Add suggestion when setting the search_path
+* Allow per dsn_alias ssh tunnel selection
 
 Internal:
 ---------
