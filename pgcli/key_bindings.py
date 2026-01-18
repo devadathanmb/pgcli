@@ -9,9 +9,9 @@ from prompt_toolkit.filters import (
     has_completions,
     has_selection,
     vi_mode,
-    vi_insert_mode,
     vi_navigation_mode,
 )
+from prompt_toolkit.layout.processors import Processor, Transformation
 
 from .pgbuffer import buffer_should_be_handled, safe_multi_line_mode
 
@@ -71,6 +71,53 @@ def setup_vim_cursor_shapes():
     ViState.input_mode = property(lambda self: self._input_mode, set_input_mode)
 
     _vim_cursor_shapes_configured = True
+
+
+class AppendAutoSuggestionInViMode(Processor):
+    """
+    Show auto-suggestions in Vi navigation mode.
+
+    Standard prompt_toolkit only shows suggestions at cursor end position.
+    Vi navigation mode places cursor one char left of end, hiding suggestions.
+    This processor also shows suggestions when cursor is at end-of-line in Vi
+    navigation mode, enabling fish-style 'l' key acceptance.
+    """
+
+    def __init__(self, style="class:auto-suggestion"):
+        self.style = style
+
+    def _should_show_suggestion(self, ti, suggestion):
+        try:
+            from prompt_toolkit.application.current import get_app
+            app = get_app()
+            is_vi_navigation = (
+                app.editing_mode == EditingMode.VI
+                and app.vi_state.input_mode == InputMode.NAVIGATION
+            )
+            if is_vi_navigation:
+                doc = ti.document
+                current_line = doc.current_line
+                cursor_col = doc.cursor_position_col
+                at_last_char_of_line = cursor_col == len(current_line) - 1 and len(current_line) > 0
+                if at_last_char_of_line or doc.is_cursor_at_the_end_of_line:
+                    return True
+        except Exception:
+            pass
+
+        return False
+
+    def apply_transformation(self, ti):
+        if ti.lineno != ti.document.line_count - 1:
+            return Transformation(fragments=ti.fragments)
+
+        buffer = ti.buffer_control.buffer
+        suggestion = buffer.suggestion
+        suggestion_text = ""
+
+        if suggestion and self._should_show_suggestion(ti, suggestion):
+            suggestion_text = suggestion.text
+
+        return Transformation(fragments=ti.fragments + [(self.style, suggestion_text)])
 
 
 def pgcli_bindings(pgcli):
@@ -221,24 +268,26 @@ def pgcli_bindings(pgcli):
 
     @Condition
     def has_suggestion_at_end():
-        """Check if there's a suggestion and cursor is at end of line."""
         from prompt_toolkit.application.current import get_app
         app = get_app()
         buffer = app.current_buffer
-        return (
-            buffer.suggestion is not None
-            and buffer.document.is_cursor_at_the_end_of_line
-        )
+        if buffer.suggestion is None:
+            return False
+        
+        doc = buffer.document
+        if doc.is_cursor_at_the_end_of_line:
+            return True
+        
+        current_line = doc.current_line
+        cursor_col = doc.cursor_position_col
+        at_last_char = cursor_col == len(current_line) - 1 and len(current_line) > 0
+        return at_last_char
 
     @kb.add("l", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
     def _(event):
-        """
-        Accept autosuggestion with 'l' in vi normal mode when at end of line.
-
-        This takes precedence over normal 'l' movement when a suggestion is available.
-        """
         _logger.debug("Accepting suggestion with 'l' in normal mode")
         buff = event.current_buffer
+        buff.cursor_position = len(buff.text)
         buff.insert_text(buff.suggestion.text)
 
     @kb.add("l", filter=vi_navigation_mode, eager=False)
@@ -249,9 +298,9 @@ def pgcli_bindings(pgcli):
 
     @kb.add("right", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
     def _(event):
-        """Accept autosuggestion with right arrow in vi normal mode when at end of line."""
         _logger.debug("Accepting suggestion with right arrow in normal mode")
         buff = event.current_buffer
+        buff.cursor_position = len(buff.text)
         buff.insert_text(buff.suggestion.text)
 
     @kb.add("right", filter=vi_navigation_mode, eager=False)

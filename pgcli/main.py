@@ -67,7 +67,7 @@ from .config import (
     get_config,
     get_config_filename,
 )
-from .key_bindings import pgcli_bindings, setup_vim_cursor_shapes
+from .key_bindings import pgcli_bindings, setup_vim_cursor_shapes, AppendAutoSuggestionInViMode
 from .packages.formatter.sqlformatter import register_new_formatter
 from .packages.prompt_utils import confirm, confirm_destructive_query
 from .packages.parseutils import is_destructive
@@ -1065,13 +1065,15 @@ class PGCli:
                 bottom_toolbar=get_toolbar_tokens if self.show_bottom_toolbar else None,
                 complete_style=complete_style,
                 input_processors=[
-                    # Highlight matching brackets while editing.
                     ConditionalProcessor(
                         processor=HighlightMatchingBracketProcessor(chars="[](){}"),
                         filter=HasFocus(DEFAULT_BUFFER) & ~IsDone(),
                     ),
-                    # Render \t as 4 spaces instead of "^I"
                     TabsProcessor(char1=" ", char2=" "),
+                    ConditionalProcessor(
+                        processor=AppendAutoSuggestionInViMode(),
+                        filter=HasFocus(DEFAULT_BUFFER) & ~IsDone(),
+                    ),
                 ],
                 auto_suggest=AutoSuggestFromHistory(),
                 tempfile_suffix=".sql",
