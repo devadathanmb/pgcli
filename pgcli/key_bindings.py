@@ -287,26 +287,16 @@ def pgcli_bindings(pgcli):
     def _(event):
         _logger.debug("Accepting suggestion with 'l' in normal mode")
         buff = event.current_buffer
+        suggestion_text = buff.suggestion.text
         buff.cursor_position = len(buff.text)
-        buff.insert_text(buff.suggestion.text)
-
-    @kb.add("l", filter=vi_navigation_mode, eager=False)
-    def _(event):
-        """Normal 'l' forward movement when no suggestion or not at end."""
-        buff = event.current_buffer
-        buff.cursor_position += buff.document.get_cursor_right_position()
+        buff.insert_text(suggestion_text, fire_event=False)
 
     @kb.add("right", filter=vi_navigation_mode & has_suggestion_at_end, eager=True)
     def _(event):
         _logger.debug("Accepting suggestion with right arrow in normal mode")
         buff = event.current_buffer
+        suggestion_text = buff.suggestion.text
         buff.cursor_position = len(buff.text)
-        buff.insert_text(buff.suggestion.text)
-
-    @kb.add("right", filter=vi_navigation_mode, eager=False)
-    def _(event):
-        """Normal right arrow forward movement when no suggestion or not at end."""
-        buff = event.current_buffer
-        buff.cursor_position += buff.document.get_cursor_right_position()
+        buff.insert_text(suggestion_text, fire_event=False)
 
     return kb
