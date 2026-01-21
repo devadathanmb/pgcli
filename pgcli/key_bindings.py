@@ -59,8 +59,8 @@ def setup_vim_cursor_shapes():
         # Cursor shape codes: 1=block, 3=underline, 5=beam
         shape = {
             InputMode.NAVIGATION: 1,  # Block cursor for normal mode
-            InputMode.REPLACE: 3,      # Underline cursor for replace mode
-            InputMode.INSERT: 5,       # Beam cursor for insert mode
+            InputMode.REPLACE: 3,  # Underline cursor for replace mode
+            InputMode.INSERT: 5,  # Beam cursor for insert mode
         }.get(mode, 5)
 
         _set_cursor_shape(shape)
@@ -89,11 +89,9 @@ class AppendAutoSuggestionInViMode(Processor):
     def _should_show_suggestion(self, ti, suggestion):
         try:
             from prompt_toolkit.application.current import get_app
+
             app = get_app()
-            is_vi_navigation = (
-                app.editing_mode == EditingMode.VI
-                and app.vi_state.input_mode == InputMode.NAVIGATION
-            )
+            is_vi_navigation = app.editing_mode == EditingMode.VI and app.vi_state.input_mode == InputMode.NAVIGATION
             if is_vi_navigation:
                 doc = ti.document
                 current_line = doc.current_line
@@ -173,10 +171,20 @@ def pgcli_bindings(pgcli):
         else:
             buff.insert_text(tab_insert_text, fire_event=False)
 
-    @kb.add("escape", filter=has_completions)
+    @kb.add("escape", filter=has_completions & vi_mode)
     def _(event):
-        """Force closing of autocompletion."""
-        _logger.debug("Detected <Esc> key.")
+        """Close autocompletion and switch to vim normal mode."""
+        _logger.debug("Detected <Esc> key in vi mode with completions.")
+
+        event.current_buffer.complete_state = None
+        event.app.current_buffer.complete_state = None
+        # Also switch to vim normal mode
+        event.app.vi_state.input_mode = InputMode.NAVIGATION
+
+    @kb.add("escape", filter=has_completions & ~vi_mode)
+    def _(event):
+        """Force closing of autocompletion in emacs mode."""
+        _logger.debug("Detected <Esc> key in emacs mode with completions.")
 
         event.current_buffer.complete_state = None
         event.app.current_buffer.complete_state = None
@@ -269,15 +277,16 @@ def pgcli_bindings(pgcli):
     @Condition
     def has_suggestion_at_end():
         from prompt_toolkit.application.current import get_app
+
         app = get_app()
         buffer = app.current_buffer
         if buffer.suggestion is None:
             return False
-        
+
         doc = buffer.document
         if doc.is_cursor_at_the_end_of_line:
             return True
-        
+
         current_line = doc.current_line
         cursor_col = doc.cursor_position_col
         at_last_char = cursor_col == len(current_line) - 1 and len(current_line) > 0
