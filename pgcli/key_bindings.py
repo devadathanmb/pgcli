@@ -189,8 +189,12 @@ def pgcli_bindings(pgcli):
         event.current_buffer.complete_state = None
         event.app.current_buffer.complete_state = None
 
-    @kb.add("c-space")
-    def _(event):
+    # Bind each key in toggle_completion_key to toggle completion.
+    # Space-separated keys each get their own binding.
+    # e.g., "c-space c-t" binds both Ctrl+Space and Ctrl+T independently.
+    toggle_keys = pgcli.toggle_auto_completion_key.strip().split()
+
+    def _toggle_completion(event):
         """
         Toggle autocompletion at cursor.
 
@@ -199,15 +203,14 @@ def pgcli_bindings(pgcli):
 
         If the menu is showing, close it (toggle off).
         """
-        _logger.debug("Detected <C-Space> key.")
-
         b = event.app.current_buffer
         if b.complete_state:
-            # Close completion menu (toggle off)
             b.complete_state = None
         else:
-            # Open completion menu (toggle on)
             b.start_completion(select_first=False)
+
+    for _key in toggle_keys:
+        kb.add(_key)(_toggle_completion)
 
     @kb.add("c-j", filter=has_completions)
     def _(event):

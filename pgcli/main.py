@@ -255,6 +255,9 @@ class PGCli:
         self.column_date_formats = c["column_date_formats"]
         auth.keyring_initialize(c["main"].as_bool("keyring"), logger=self.logger)
         self.show_bottom_toolbar = c["main"].as_bool("show_bottom_toolbar")
+        self.toggle_auto_completion_key = c["main"].get(
+            "toggle_auto_completion_key", "c-space"
+        )
 
         self.pgspecial.pset_pager(self.config["main"].as_bool("enable_pager") and "on" or "off")
 

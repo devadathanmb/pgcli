@@ -154,6 +154,16 @@ syntax_style = default
 #   Ctrl+k       - Navigate to previous completion (up) - Vim style
 #   Ctrl+p       - Move up in history
 #   Ctrl+n       - Move down in history
+
+# Key binding for toggling the auto-completion menu on/off.
+# Uses prompt_toolkit key notation. Space-separated keys each
+# get their own independent binding. Examples:
+#   c-space          (Ctrl+Space - default)
+#   c-t              (Ctrl+T)
+#   c-space c-t      (both Ctrl+Space and Ctrl+T will toggle)
+# See prompt_toolkit docs for full key notation reference.
+toggle_auto_completion_key = c-space
+
 vi = False
 
 # Error handling
